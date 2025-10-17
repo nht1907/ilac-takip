@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>İlaç Takip</title>
+  <meta name="theme-color" content="#0f172a">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" sizes="192x192">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <style>
+    :root{--bg:#0f172a;--fg:#e2e8f0;--muted:#94a3b8;--border:#1f2937;--accent:#22c55e;--accent2:#38bdf8;--warn:#f59e0b}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:#0f172a;color:var(--fg)}
+    header{position:sticky;top:0;z-index:10;background:#0b1224;border-bottom:1px solid var(--border);padding:12px 14px;display:flex;gap:10px;align-items:center;justify-content:space-between}
+    .title{font-weight:800;font-size:18px}
+    .wrap{max-width:920px;margin:0 auto;padding:16px}
+    .row{display:flex;gap:8px;flex-wrap:wrap}
+    .btn{display:inline-block;padding:10px 14px;border-radius:12px;border:1px solid var(--border);background:#0a0f1d;color:var(--fg);cursor:pointer}
+    .card{background:#0b1224;border:1px solid var(--border);border-radius:16px;padding:16px;box-shadow:0 8px 24px rgba(0,0,0,.25);margin:12px 0}
+    .badge{font-size:12px;border:1px solid var(--border);border-radius:999px;padding:4px 8px;color:var(--muted)}
+    .tabs{display:flex;gap:8px}
+    .tab-btn{border:1px solid var(--border);background:#0b1224;color:var(--fg);padding:8px 12px;border-radius:10px;cursor:pointer}
+    .tab-btn.active{border-color:var(--accent2)}
+    .container{max-width:900px;margin:16px auto;padding:0 12px 64px}
+    .list{display:flex;flex-direction:column;gap:8px}
+    .dose{display:flex;align-items:center;justify-content:space-between;background:#0a0f1d;border:1px solid var(--border);border-radius:12px;padding:10px}
+    .dose.done{opacity:.6}
+    label{font-size:12px;color:var(--muted);display:block;margin:6px 0 4px}
+    input,select{width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:#0a0f1d;color:var(--fg)}
+    input[type=time]{padding:8px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    @media (max-width:800px){.grid{grid-template-columns:1fr}}
+    .toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#0b1224;border:1px solid var(--border);border-radius:12px;padding:10px 14px;color:#e2e8f0;opacity:.95;z-index:1000}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="title">💊 İlaç Takip</div>
+    <div class="row">
+      <button class="btn" id="installBtn" style="display:none">Ana Ekrana Ekle</button>
+      <button class="btn" id="notifyBtn">Bildirim İzni</button>
+      <button class="btn" id="exportICS">Takvime Aktar (ICS)</button>
+      <span class="badge" id="statusBadge">Hazır</span>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="card">
+      <p class="badge">Bu sürüm iki yöntem sunar: Bildirim (uygulama açıkken) + ICS (Takvim → arka plan). ICS her zaman daha garantidir.</p>
+    </div>
+
+    <div class="card">
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="today">Bugün</button>
+        <button class="tab-btn" data-tab="meds">İlaçlar</button>
+        <button class="tab-btn" data-tab="history">Geçmiş</button>
+      </div>
+      <div class="container">
+        <section id="today" class="tab">
+          <h3>Bugünkü Dozlar</h3>
+          <div class="badge" id="todayDate"></div>
+          <div id="todayList" class="list" style="margin-top:8px"></div>
+          <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+            <button class="btn" id="resetTodayBtn">Günü Bitir</button>
+            <span class="badge" id="todayStats"></span>
+          </div>
+        </section>
+
+        <section id="meds" class="tab" style="display:none">
+          <h3>İlaçlarım</h3>
+          <div id="medsList" class="list" style="margin-top:8px"></div>
+          <hr style="border-color:#1f2937;border-style:solid;border-width:1px 0 0;margin:12px 0">
+          <h4>Yeni İlaç</h4>
+          <div class="grid">
+            <div><label>İlaç Adı</label><input id="m_name"></div>
+            <div><label>Doz</label><input id="m_dose" placeholder="500 mg"></div>
+            <div><label>Başlangıç</label><input id="m_start" type="date"></div>
+            <div><label>Bitiş</label><input id="m_end" type="date"></div>
+            <div><label>Günlük tekrar</label>
+              <select id="m_times"><option>1</option><option>2</option><option>3</option><option>4</option></select>
+            </div>
+            <div><label>Aç/Tok</label>
+              <select id="m_food"><option value="">Farketmez</option><option>Aç</option><option>Tok</option></select>
+            </div>
+            <div id="timeInputs" class="grid"></div>
+            <div class="grid">
+              <div><label>Not</label><input id="m_note"></div>
+              <div style="display:flex;gap:8px;align-items:flex-end;justify-content:flex-end">
+                <button class="btn" id="clearForm">Temizle</button>
+                <button class="btn" id="addMed">Ekle</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="history" class="tab" style="display:none">
+          <h3>Geçmiş</h3>
+          <div id="historyList" class="list"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Helpers
+    const $ = (s, r=document) => r.querySelector(s);
+    const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+    function toast(msg){ const t=document.createElement('div'); t.className='toast'; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2200); }
+
+    // Tabs
+    const tabs=$$('.tab-btn'), panels=$$('.tab');
+    tabs.forEach(btn=>btn.addEventListener('click',()=>{
+      tabs.forEach(b=>b.classList.remove('active')); btn.classList.add('active');
+      const id=btn.dataset.tab; panels.forEach(p=>p.style.display=(p.id===id)?'block':'none');
+      if(id==='today') renderToday(); if(id==='meds') renderMeds(); if(id==='history') renderHistory();
+    }));
+
+    // Storage
+    const LS_MEDS='meds.v1', LS_LOGS='logs.v1', LS_DAILY='daily.v1';
+    const R=(k,f)=>{ try{ return JSON.parse(localStorage.getItem(k)) ?? f }catch(e){ return f } };
+    const W=(k,v)=>localStorage.setItem(k, JSON.stringify(v));
+
+    // Utils
+    const uid=()=>Math.random().toString(36).slice(2)+Date.now().toString(36);
+    const ymd=(d=new Date())=>{ const z=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}` };
+    const hm=(d=new Date())=>{ const z=n=>String(n).padStart(2,'0'); return `${z(d.getHours())}:${z(d.getMinutes())}` };
+
+    // Time inputs
+    function renderTimeInputs(){
+      const n=parseInt($('#m_times').value||'1',10);
+      const wrap=$('#timeInputs'); wrap.innerHTML='';
+      for(let i=0;i<n;i++){
+        const id=`m_time_${i}`;
+        const def=['08:00','14:00','20:00','23:00'][i]||'08:00';
+        wrap.insertAdjacentHTML('beforeend', `<div><label>Saat ${i+1}</label><input id="${id}" type="time" value="${def}"></div>`);
+      }
+    }
+    $('#m_times').addEventListener('change', renderTimeInputs); renderTimeInputs();
+
+    // Meds CRUD
+    $('#addMed').addEventListener('click', ()=>{
+      const name=$('#m_name').value.trim(); if(!name){ toast('İlaç adını gir'); return; }
+      const med={
+        id: uid(),
+        name,
+        dose: $('#m_dose').value.trim(),
+        start: $('#m_start').value || ymd(),
+        end: $('#m_end').value || '',
+        food: $('#m_food').value,
+        note: $('#m_note').value.trim(),
+        times: []
+      };
+      const n=parseInt($('#m_times').value||'1',10);
+      for(let i=0;i<n;i++){ med.times.push(($('#m_time_'+i).value)||'08:00'); }
+      const meds=R(LS_MEDS,[]); meds.push(med); W(LS_MEDS,meds);
+      clearForm(); renderMeds(); toast('İlaç eklendi');
+    });
+    $('#clearForm').addEventListener('click', clearForm);
+    function clearForm(){
+      $('#m_name').value=''; $('#m_dose').value=''; $('#m_start').value=''; $('#m_end').value='';
+      $('#m_food').value=''; $('#m_note').value=''; $('#m_times').value='1'; renderTimeInputs();
+    }
+
+    function renderMeds(){
+      const el=$('#medsList'); el.innerHTML='';
+      const meds=R(LS_MEDS,[]);
+      if(!meds.length){ el.innerHTML='<div class="badge">Henüz ilaç yok.</div>'; return; }
+      meds.sort((a,b)=>a.name.localeCompare(b.name));
+      meds.forEach(m=>{
+        const badge=m.end?`<span class="badge">Bit: ${m.end}</span>`:`<span class="badge">Süresiz</span>`;
+        el.insertAdjacentHTML('beforeend', `
+          <div class="dose">
+            <div>
+              <div style="font-weight:700">${m.name} <span class="badge">${m.dose||''}</span></div>
+              <div class="badge" style="display:block;margin-top:4px">${(m.times||[]).join(' · ')} ${m.food?(' · '+m.food):''} ${m.note?(' · '+m.note):''}</div>
+              <div class="badge" style="display:block;margin-top:4px">Baş: ${m.start} · ${badge}</div>
+            </div>
+            <div class="row">
+              <button class="btn" data-act="edit" data-id="${m.id}">Düzenle</button>
+              <button class="btn" data-act="del" data-id="${m.id}">Sil</button>
+            </div>
+          </div>
+        `);
+      });
+      el.addEventListener('click', (e)=>{
+        const b=e.target.closest('button'); if(!b) return;
+        const id=b.dataset.id; const act=b.dataset.act;
+        const meds=R(LS_MEDS,[]); const i=meds.findIndex(x=>x.id===id); if(i<0) return;
+        if(act==='del'){
+          if(confirm('Silinsin mi?')){ meds.splice(i,1); W(LS_MEDS,meds); renderMeds(); renderToday(); }
+        }else{
+          const m=meds[i];
+          const name=prompt('İlaç adı', m.name); if(name===null) return;
+          const dose=prompt('Doz', m.dose||''); if(dose===null) return;
+          const start=prompt('Başlangıç (YYYY-MM-DD)', m.start); if(start===null) return;
+          const end=prompt('Bitiş (boş olabilir)', m.end||''); if(end===null) return;
+          const food=prompt('Aç/Tok', m.food||''); if(food===null) return;
+          const times=prompt('Saatler virgülle (08:00,14:00,20:00)', m.times.join(',')); if(times===null) return;
+          const note=prompt('Not', m.note||''); if(note===null) return;
+          meds[i]={...m, name, dose, start, end, food, note, times: times.split(',').map(s=>s.trim()).filter(Boolean)};
+          W(LS_MEDS,meds); renderMeds(); renderToday();
+        }
+      }, {once:true});
+    }
+
+    // Today
+    const activeOn=(m,day)=>{
+      const s=m.start||'0000-00-00', e=m.end||'9999-12-31';
+      return day>=s && day<=e;
+    };
+    function renderToday(){
+      const day=ymd();
+      $('#todayDate').textContent = new Date().toLocaleDateString('tr-TR',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+      const meds=(R(LS_MEDS,[])).filter(m=>activeOn(m,day));
+      const logs=R(LS_LOGS,[]);
+      const list=$('#todayList'); list.innerHTML='';
+      const items=[];
+      meds.forEach(m => (m.times||[]).forEach(t => items.push({med:m, time:t, done: !!logs.find(x=>x.key===day+'|'+m.id+'|'+t)})));
+      items.sort((a,b)=>a.time.localeCompare(b.time));
+      if(!items.length){ list.innerHTML='<div class="badge">Bugün planlı doz yok.</div>'; $('#todayStats').textContent=''; return; }
+      let ok=0;
+      items.forEach(({med,time,done})=>{
+        if(done) ok++;
+        list.insertAdjacentHTML('beforeend', `
+          <div class="dose ${done?'done':''}">
+            <div style="display:flex;align-items:center;gap:8px">
+              <input type="checkbox" ${done?'checked':''} data-id="${med.id}" data-time="${time}">
+              <div style="font-weight:700">${time} · ${med.name}</div>
+            </div>
+            <span class="badge">${done?'Alındı':'Bekliyor'}</span>
+          </div>
+        `);
+      });
+      $('#todayStats').textContent = `${ok}/${items.length} doz`;
+
+      list.addEventListener('change', (e)=>{
+        const cb=e.target; if(cb.tagName!=='INPUT') return;
+        const id=cb.dataset.id, t=cb.dataset.time, k=day+'|'+id+'|'+t;
+        let logs=R(LS_LOGS,[]); const i=logs.findIndex(x=>x.key===k);
+        if(cb.checked){ if(i<0) logs.push({key:k, ymd:day, medId:id, time:t, ts:Date.now()}); }
+        else { if(i>=0) logs.splice(i,1); }
+        W(LS_LOGS,logs); renderToday();
+      }, {once:true});
+    }
+
+    // Day end
+    $('#resetTodayBtn').addEventListener('click', ()=>{
+      if(!confirm('Bugünü bitir?')) return;
+      const day=ymd();
+      const meds=(R(LS_MEDS,[])).filter(m=>activeOn(m,day));
+      const logs=(R(LS_LOGS,[])).filter(x=>x.ymd===day);
+      const total=meds.reduce((a,m)=>a+(m.times||[]).length,0);
+      const done=logs.length;
+      const daily=R(LS_DAILY,[]);
+      const i=daily.findIndex(x=>x.ymd===day);
+      const item={ymd:day,total,done,rate: total? Math.round(done*100/total):100, ts:Date.now()};
+      if(i>=0) daily[i]=item; else daily.push(item);
+      W(LS_DAILY,daily);
+      W(LS_LOGS, (R(LS_LOGS,[])).filter(x=>x.ymd!==day));
+      toast('Gün sonu kaydedildi');
+      renderToday();
+    });
+
+    // History
+    function renderHistory(){
+      const el=$('#historyList'); el.innerHTML='';
+      const daily=(R(LS_DAILY,[])).sort((a,b)=>b.ymd.localeCompare(a.ymd));
+      if(!daily.length){ el.innerHTML='<div class="badge">Henüz gün sonu yok.</div>'; return; }
+      daily.forEach(d=>{
+        el.insertAdjacentHTML('beforeend', `<div class="dose"><div><div style="font-weight:700">${d.ymd}</div><div class="badge">${d.done}/${d.total} doz · %${d.rate}</div></div><div class="badge">%${d.rate}</div></div>`);
+      });
+    }
+
+    // --- PWA install prompt
+    let deferredPrompt;
+    window.addEventListener('beforeinstallprompt', (e)=>{
+      e.preventDefault();
+      deferredPrompt = e;
+      const btn = document.getElementById('installBtn');
+      btn.style.display='inline-block';
+      btn.onclick = async () => {
+        await deferredPrompt.prompt();
+        await deferredPrompt.userChoice;
+        btn.style.display='none';
+        deferredPrompt=null;
+      };
+    });
+    if('serviceWorker' in navigator){ window.addEventListener('load', ()=>navigator.serviceWorker.register('./sw.js')); }
+
+    // --- Notifications (foreground)
+    const statusBadge = document.getElementById('statusBadge');
+    const notifyBtn = document.getElementById('notifyBtn');
+    let notifyTimer = null;
+    const nowHM = ()=>hm();
+
+    async function ensurePermission(){
+      if (!('Notification' in window)) { toast('Tarayıcı bildirimi desteklemiyor'); return false; }
+      let perm = Notification.permission;
+      if (perm === 'default') perm = await Notification.requestPermission();
+      if (perm !== 'granted') { toast('Bildirim izni verilmedi'); return false; }
+      return true;
+    }
+    function sendNote(title, body){
+      try{ const n=new Notification(title, {body, icon:'./icons/icon-192.png', vibrate:[150,80,150]}); setTimeout(()=>n.close(), 12000); }catch(e){}
+    }
+    function scheduleLoop(){
+      clearInterval(notifyTimer);
+      notifyTimer = setInterval(()=>{
+        const meds = R(LS_MEDS,[]) || [];
+        const day = ymd();
+        const hmNow = nowHM();
+        const active = meds.filter(m => (day >= (m.start||'0000-00-00') && day <= (m.end||'9999-12-31')) );
+        active.forEach(m => (m.times||[]).forEach(t => {
+          const k = `__note_${day}_${m.id}_${t}`;
+          if (t===hmNow && !localStorage.getItem(k)){
+            localStorage.setItem(k,'1');
+            const dose = m.dose ? ` (${m.dose})` : '';
+            const food = m.food ? ` · ${m.food}` : '';
+            const note = m.note ? ` · ${m.note}` : '';
+            sendNote(`İlaç zamanı: ${m.name}${dose}`, `${t} için hatırlatma${food}${note}`);
+          }
+        }));
+        statusBadge.textContent = `Dinleniyor • ${hmNow}`;
+      }, 20*1000); // 20 sn
+    }
+    notifyBtn.addEventListener('click', async ()=>{
+      const ok = await ensurePermission();
+      if(ok){ scheduleLoop(); notifyBtn.textContent='Bildirim Açık'; notifyBtn.disabled=true; toast('Bildirim zamanlayıcı başlatıldı'); }
+    });
+
+    // --- ICS export (30 gün)
+    function dtstamp(d){ const z=n=>String(n).padStart(2,'0'); return `${d.getUTCFullYear()}${z(d.getUTCMonth()+1)}${z(d.getUTCDate())}T${z(d.getUTCHours())}${z(d.getUTCMinutes())}00Z`; }
+    document.getElementById('exportICS').addEventListener('click', ()=>{
+      const meds = R(LS_MEDS,[]) || [];
+      if(!meds.length){ toast('Önce ilaç ekleyin'); return; }
+      const start = new Date(); start.setHours(0,0,0,0);
+      const days = 30;
+      const lines = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//IlacTakip//TR','CALSCALE:GREGORIAN','METHOD:PUBLISH'];
+      for(let d=0; d<days; d++){
+        const day = new Date(start.getTime()+d*24*3600*1000);
+        const y = day.getFullYear(), m = String(day.getMonth()+1).padStart(2,'0'), dd = String(day.getDate()).padStart(2,'0');
+        const ymdStr = `${y}-${m}-${dd}`;
+        meds.forEach(med => {
+          const s = med.start || '0000-00-00', e = med.end || '9999-12-31';
+          if(!(ymdStr>=s && ymdStr<=e)) return;
+          (med.times||[]).forEach(t => {
+            const [hh, mm] = t.split(':').map(Number);
+            const dtstart = `${y}${m}${dd}T${String(hh).padStart(2,'0')}${String(mm).padStart(2,'0')}00`;
+            const dtend = `${y}${m}${dd}T${String(hh).padStart(2,'0')}${String((mm+5)%60).padStart(2,'0')}00`;
+            const uid = `${ymdStr}-${med.id}-${t}@ilac-takip`;
+            const summary = `İlaç: ${med.name}${med.dose?(' ('+med.dose+')'):''}`;
+            const desc = `Not: ${(med.note||'')} ${med.food?(' · '+med.food):''}`.trim();
+            lines.push('BEGIN:VEVENT');
+            lines.push(`UID:${uid}`);
+            lines.push(`DTSTAMP:${dtstamp(new Date())}`);
+            lines.push(`DTSTART:${dtstart}`);
+            lines.push(`DTEND:${dtend}`);
+            lines.push(`SUMMARY:${summary}`);
+            lines.push(`DESCRIPTION:${desc}`);
+            lines.push('BEGIN:VALARM'); lines.push('TRIGGER:-PT5M'); lines.push('ACTION:DISPLAY'); lines.push('DESCRIPTION:İlaç Hatırlatma'); lines.push('END:VALARM');
+            lines.push('END:VEVENT');
+          });
+        });
+      }
+      lines.push('END:VCALENDAR');
+      const blob = new Blob([lines.join('\r\n')], {type:'text/calendar'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'ilac_takip_30gun.ics';
+      a.click();
+      toast('ICS indirildi — Takvim ile aç');
+    });
+
+    // First render
+    (function(){ renderToday(); renderMeds(); renderHistory(); })();
+  </script>
+</body>
+</html>
